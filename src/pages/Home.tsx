@@ -7,10 +7,7 @@ import {
   CheckCircle,
   Clock,
   Truck,
-  Thermometer,
-  Droplets,
   Activity,
-  Plus,
   RefreshCw,
   Filter,
 } from 'lucide-react';
@@ -28,15 +25,28 @@ export default function Home() {
   const navigate = useNavigate();
   const { batches, loading, error, fetchBatches } = useBatchStore();
   const [statusFilter, setStatusFilter] = useState<BatchStatus | 'all'>('all');
+  const [roomFilter, setRoomFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchBatches();
   }, [fetchBatches]);
 
-  const filteredBatches =
-    statusFilter === 'all'
-      ? batches
-      : batches.filter((b) => b.status === statusFilter);
+  const filteredBatches = batches.filter((b) => {
+    const statusMatch = statusFilter === 'all' || b.status === statusFilter;
+    const roomMatch = roomFilter === 'all' || b.room_no === roomFilter;
+    return statusMatch && roomMatch;
+  });
+
+  const rooms = Array.from(new Set(batches.map((b) => b.room_no))).sort();
+
+  const roomStats = rooms.map((room) => {
+    const roomBatches = batches.filter((b) => b.room_no === room);
+    return {
+      room_no: room,
+      fermenting: roomBatches.filter((b) => b.status === 'fermenting').length,
+      pending_review: roomBatches.filter((b) => b.status === 'pending_review').length,
+    };
+  });
 
   const pendingBatches = batches.filter((b) => b.status === 'pending_review');
   const fermentingBatches = batches.filter((b) => b.status === 'fermenting');
@@ -134,6 +144,62 @@ export default function Home() {
         })}
       </div>
 
+      {roomStats.length > 0 && (
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 border-b border-gray-200 sm:px-6">
+            <div className="flex items-center">
+              <Package className="h-5 w-5 text-gray-400 mr-2" />
+              <h2 className="text-lg font-medium text-gray-900">发酵房概览</h2>
+            </div>
+            <p className="mt-1 text-sm text-gray-500">
+              点击发酵房卡片可快速筛选该房批次
+            </p>
+          </div>
+          <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+            {roomStats.map((stat) => {
+              const isActive = roomFilter === stat.room_no;
+              return (
+                <button
+                  key={stat.room_no}
+                  onClick={() =>
+                    setRoomFilter(isActive ? 'all' : stat.room_no)
+                  }
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    isActive
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200 bg-gray-50 hover:border-green-300 hover:bg-green-50'
+                  }`}
+                >
+                  <div className="text-lg font-bold text-gray-900">
+                    {stat.room_no}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-blue-600 flex items-center">
+                        <Clock className="h-3 w-3 mr-1" />
+                        发酵中
+                      </span>
+                      <span className="font-medium text-blue-600">
+                        {stat.fermenting}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-red-600 flex items-center">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        待复核
+                      </span>
+                      <span className="font-medium text-red-600">
+                        {stat.pending_review}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {pendingBatches.length > 0 && (
         <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
           <div className="flex items-start">
@@ -195,7 +261,7 @@ export default function Home() {
               <Package className="h-5 w-5 text-gray-400 mr-2" />
               <h2 className="text-lg font-medium text-gray-900">所有批次</h2>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center">
                 <Filter className="h-4 w-4 text-gray-400 mr-2" />
                 <select
@@ -212,6 +278,29 @@ export default function Home() {
                   <option value="shipped">已出库</option>
                 </select>
               </div>
+              <div className="flex items-center">
+                <Package className="h-4 w-4 text-gray-400 mr-2" />
+                <select
+                  value={roomFilter}
+                  onChange={(e) => setRoomFilter(e.target.value)}
+                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
+                >
+                  <option value="all">全部发酵房</option>
+                  {rooms.map((room) => (
+                    <option key={room} value={room}>
+                      {room}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {roomFilter !== 'all' && (
+                <button
+                  onClick={() => setRoomFilter('all')}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+                >
+                  清除发酵房筛选
+                </button>
+              )}
             </div>
           </div>
         </div>

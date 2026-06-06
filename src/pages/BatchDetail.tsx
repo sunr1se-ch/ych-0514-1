@@ -6,7 +6,6 @@ import {
   MapPin,
   Calendar,
   Thermometer,
-  Droplets,
   Activity,
   FileText,
   AlertTriangle,
@@ -14,6 +13,8 @@ import {
   RefreshCw,
   Clock,
   Truck,
+  Eye,
+  Users,
 } from 'lucide-react';
 import {
   LineChart,
@@ -29,18 +30,27 @@ import {
 } from 'recharts';
 import dayjs from 'dayjs';
 import { useBatchStore } from '../store/useBatchStore';
-import { statusLabels, statusColors } from '../types';
+import { statusLabels, statusColors, type BatchStatus } from '../types';
 import { reviewApi, elasticityApi } from '../api/client';
 
 const REBOUND_THRESHOLD = 62;
+
+const statusIcons: Record<BatchStatus, React.ElementType | null> = {
+  fermenting: Clock,
+  pending_review: AlertTriangle,
+  approved: CheckCircle,
+  shipped: Truck,
+};
 
 export default function BatchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
+    batches,
     currentBatch,
     loading,
     error,
+    fetchBatches,
     fetchBatchDetail,
     clearCurrentBatch,
     refreshBatchStatus,
@@ -71,11 +81,21 @@ export default function BatchDetail() {
   useEffect(() => {
     if (id) {
       fetchBatchDetail(Number(id));
+      fetchBatches();
     }
     return () => {
       clearCurrentBatch();
     };
-  }, [id, fetchBatchDetail, clearCurrentBatch]);
+  }, [id, fetchBatchDetail, fetchBatches, clearCurrentBatch]);
+
+  const sameRoomBatches = currentBatch
+    ? batches.filter(
+        (b) =>
+          b.room_no === currentBatch.batch.room_no &&
+          b.id !== currentBatch.batch.id &&
+          b.status !== 'shipped',
+      )
+    : [];
 
   if (loading && !currentBatch) {
     return (
@@ -455,6 +475,51 @@ export default function BatchDetail() {
                     <p className="text-sm text-gray-900">{shipment.notes}</p>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {sameRoomBatches.length > 0 && (
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Users className="h-5 w-5 mr-2 text-gray-400" />
+                {batch.room_no} 其他批次
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({sameRoomBatches.length} 个)
+                </span>
+              </h2>
+              <p className="text-sm text-gray-500 mb-3">
+                同发酵房、尚未出库的其他批次
+              </p>
+              <div className="space-y-2">
+                {sameRoomBatches.map((b) => {
+                  const StatusIcon = statusIcons[b.status];
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => navigate(`/batch/${b.id}`)}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 hover:border-green-300 transition-colors text-left"
+                    >
+                      <div className="flex items-center">
+                        <Package className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="text-sm font-medium text-gray-900">
+                          {b.batch_no}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[b.status]}`}
+                        >
+                          {StatusIcon && (
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                          )}
+                          {statusLabels[b.status]}
+                        </span>
+                        <Eye className="h-4 w-4 text-gray-400" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

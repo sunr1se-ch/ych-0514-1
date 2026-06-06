@@ -12,7 +12,7 @@ import {
   Thermometer,
   Droplets,
   FileText,
-  User,
+  Filter,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useBatchStore } from '../store/useBatchStore';
@@ -27,6 +27,7 @@ export default function Review() {
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showElasticityModal, setShowElasticityModal] = useState(false);
+  const [roomFilter, setRoomFilter] = useState<string>('all');
   const [reviewForm, setReviewForm] = useState({
     reviewer: '',
     review_result: 'approved' as 'approved' | 'rejected',
@@ -42,6 +43,18 @@ export default function Review() {
   useEffect(() => {
     fetchPendingBatches();
   }, [fetchPendingBatches]);
+
+  const getOverdueDays = (batch: typeof pendingBatches[0]) => {
+    const fermentDays = batch.ferment_days ?? 0;
+    const targetDays = batch.target_ferment_days;
+    return Math.max(0, fermentDays - targetDays);
+  };
+
+  const rooms = Array.from(new Set(pendingBatches.map((b) => b.room_no))).sort();
+
+  const sortedAndFilteredBatches = [...pendingBatches]
+    .filter((b) => roomFilter === 'all' || b.room_no === roomFilter)
+    .sort((a, b) => getOverdueDays(b) - getOverdueDays(a));
 
   const handleReview = async () => {
     if (reviewForm.reviewer.trim() === '') {
@@ -164,23 +177,52 @@ export default function Review() {
 
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 border-b border-gray-200 sm:px-6">
-          <div className="flex items-center">
-            <AlertTriangle className="h-6 w-6 text-red-500 mr-2" />
-            <h2 className="text-lg font-medium text-gray-900">
-              待复核批次
-              {pendingBatches.length > 0 && (
-                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                  {pendingBatches.length} 条待处理
-                </span>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="flex items-center">
+                <AlertTriangle className="h-6 w-6 text-red-500 mr-2" />
+                <h2 className="text-lg font-medium text-gray-900">
+                  待复核批次
+                  {sortedAndFilteredBatches.length > 0 && (
+                    <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      {sortedAndFilteredBatches.length} 条待处理
+                    </span>
+                  )}
+                </h2>
+              </div>
+              <p className="mt-1 text-sm text-gray-500">
+                以下批次已达目标发酵天数，但连续 2 次回弹低于 {REBOUND_THRESHOLD}%，需复核员确认
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center">
+                <Filter className="h-4 w-4 text-gray-400 mr-2" />
+                <select
+                  value={roomFilter}
+                  onChange={(e) => setRoomFilter(e.target.value)}
+                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm rounded-md"
+                >
+                  <option value="all">全部发酵房</option>
+                  {rooms.map((room) => (
+                    <option key={room} value={room}>
+                      {room}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {roomFilter !== 'all' && (
+                <button
+                  onClick={() => setRoomFilter('all')}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+                >
+                  清除筛选
+                </button>
               )}
-            </h2>
+            </div>
           </div>
-          <p className="mt-1 text-sm text-gray-500">
-            以下批次已达目标发酵天数，但连续 2 次回弹低于 {REBOUND_THRESHOLD}%，需复核员确认
-          </p>
         </div>
 
-        {pendingBatches.length === 0 ? (
+        {sortedAndFilteredBatches.length === 0 ? (
           <div className="px-4 py-12 text-center">
             <CheckCircle className="h-16 w-16 text-green-400 mx-auto" />
             <h3 className="mt-4 text-lg font-medium text-gray-900">
@@ -192,20 +234,39 @@ export default function Review() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {pendingBatches.map((batch) => (
-              <div
-                key={batch.id}
-                className="p-4 sm:p-6 bg-red-50 hover:bg-red-100 transition-colors"
-              >
+            {sortedAndFilteredBatches.map((batch) => {
+              const overdueDays = getOverdueDays(batch);
+              const isOverdue3Days = overdueDays >= 3;
+              return (
+                <div
+                  key={batch.id}
+                  className={`p-4 sm:p-6 transition-colors ${
+                    isOverdue3Days
+                      ? 'bg-red-100 hover:bg-red-200 border-l-4 border-red-600'
+                      : 'bg-red-50 hover:bg-red-100'
+                  }`}
+                >
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center justify-between sm:items-start">
                       <div className="flex items-center">
                         <Package className="h-6 w-6 text-red-500 mr-3" />
                         <div>
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {batch.batch_no}
-                          </h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-medium text-gray-900">
+                              {batch.batch_no}
+                            </h3>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              {batch.room_no}
+                            </span>
+                            {isOverdue3Days && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-600 text-white animate-pulse">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                超期 {overdueDays} 天
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-500">
                             {batch.tobacco_type}
                           </p>
@@ -218,7 +279,7 @@ export default function Review() {
                       </span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
                       <div className="bg-white rounded-lg p-3">
                         <div className="flex items-center text-sm text-gray-500">
                           <MapPin className="h-4 w-4 mr-1" />
@@ -230,12 +291,28 @@ export default function Review() {
                       </div>
                       <div className="bg-white rounded-lg p-3">
                         <div className="flex items-center text-sm text-gray-500">
+                          <Package className="h-4 w-4 mr-1" />
+                          发酵房
+                        </div>
+                        <p className="mt-1 text-sm font-medium text-gray-900">
+                          {batch.room_no}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="flex items-center text-sm text-gray-500">
                           <Clock className="h-4 w-4 mr-1" />
                           发酵天数
                         </div>
                         <p className="mt-1 text-sm font-medium text-gray-900">
                           {batch.ferment_days}/{batch.target_ferment_days} 天
                         </p>
+                        {overdueDays > 0 && (
+                          <p className={`text-xs font-medium mt-1 ${
+                            isOverdue3Days ? 'text-red-600' : 'text-orange-600'
+                          }`}>
+                            超期 {overdueDays} 天
+                          </p>
+                        )}
                       </div>
                       <div className="bg-white rounded-lg p-3">
                         <div className="flex items-center text-sm text-gray-500">
@@ -372,7 +449,8 @@ export default function Review() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
